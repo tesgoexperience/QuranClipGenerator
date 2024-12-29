@@ -4,10 +4,21 @@ from mutagen.mp3 import MP3
 import uuid
 
 # step 1 define params
-fromVerse = 1
-toVerse = 2
-suranNumber = 4
-reciter = 7 # Max 11 visit https://api.quran.com/api/v4/resources/recitations to see all reciters
+fromVerse = 33
+toVerse = 42
+suranNumber = 80
+reciter = 4 # Max 11 visit https://api.quran.com/api/v4/resources/recitations to see all reciters
+
+clip = (
+    VideoFileClip("./good_clips/horizontal.mp4")
+    .with_volume_scaled(1)
+)
+
+
+# This script is based on a clip that is 720x1280
+# To make adjustments create a multiplier
+multiplierHeight = clip.h / 1280;
+multiplierWidth = clip.w / 720;
 
 # for each verse, display the verse, play the audio
 # each text clip should have the duration of its audio clip
@@ -15,16 +26,17 @@ reciter = 7 # Max 11 visit https://api.quran.com/api/v4/resources/recitations to
 total_duration = 0;
 txt_clips = []
 audio_clips = []
+translation_txt_clips = []
 
-for i in range(fromVerse, toVerse):
+for i in range(fromVerse, toVerse + 1):
     
     ayahKey = f"{suranNumber}:{i}"
     verse = requests.get(f"https://api.quran.com/api/v4/recitations/{reciter}/by_ayah/{ayahKey}").json()
     audio_link = "https://verses.quran.com/"+verse["audio_files"][0]["url"]
    
-    text = requests.get(f"https://api.quran.com/api/v4/quran/verses/uthmani?verse_key={ayahKey}").json()["verses"][0]["text_uthmani"]
-    
-    # text = text + " " + convert_to_arabic(i);
+    text =  requests.get(f"https://api.quran.com/api/v4/quran/verses/uthmani?verse_key={ayahKey}").json()["verses"][0]["text_uthmani"]
+    translation = requests.get(f"https://api.alquran.cloud/v1/ayah/{ayahKey}/en.hilali").json()["data"]["text"]
+    # text =  text + " " + convert_to_arabic(i);
 
     # convert number to arabic
 
@@ -36,37 +48,48 @@ for i in range(fromVerse, toVerse):
         file.write(response.content)
     
     audioFileLength = MP3(fileName).info.length
-    
+    audioFileLength = audioFileLength - (0.3) # remove pause between verses
     total_duration = total_duration + audioFileLength;
     
     # create the text clip
     
-    txt_clip = TextClip(
-        font="./AlQalamQuran.ttf",
+    quran_txt_clip = TextClip(
+        font="./font.ttf",
         method='caption',
-        # font="./font.ttf",
         text=text,
-        size=(600, 600),
+        size=(int(600 * multiplierWidth) , int(400 * multiplierHeight)),
+        margin=(0,220 * multiplierHeight,0,25),
         text_align='center',
-        font_size=40,
+        vertical_align="bottom",
+        font_size=int(50 * multiplierWidth),
         color='white',
-        bg_color='black',
-        ).with_duration(audioFileLength).with_position('center')
+        ).with_duration(audioFileLength)
 
-    txt_clip.audio = AudioFileClip(fileName)
+    quran_txt_clip.audio = AudioFileClip(fileName)
     
-    txt_clips.append(txt_clip)
-#
-clip = (
-    VideoFileClip("./clip.mp4")
-    .with_volume_scaled(1)
-)
+    translation_txt_clip = TextClip(
+        font="font/Tinos-Regular.ttf",
+        method='caption',
+        text=translation,
+        size=(int(600 * multiplierWidth) , int(400 * multiplierHeight)),
+        margin=(0,0,0,250 * multiplierHeight),
+        text_align='center',
+        vertical_align="top",
+        font_size=int( 20 * multiplierWidth),
+        color='white',
+        
+        ).with_duration(audioFileLength)
+    
+    translation_txt_clips.append(translation_txt_clip)
+
+    txt_clips.append(quran_txt_clip)
 
 clip = vfx.Loop(duration=total_duration + 1).apply(clip)
 
-concat_txt_clips = concatenate_videoclips(txt_clips).with_position('center')
+concat_txt_clips = concatenate_videoclips(txt_clips).with_position("top")
+concat_translation_txt_clips = concatenate_videoclips(translation_txt_clips).with_position("bottom")
 
-final_video = CompositeVideoClip([clip, concat_txt_clips])
+final_video = CompositeVideoClip([clip, concat_txt_clips, concat_translation_txt_clips])
 final_video.write_videofile("result.mp4")
 
 
